@@ -1,7 +1,7 @@
 import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
-import cloudinary from "../lib/cloudinary.js";
+import { supabase } from "../lib/supabase.js";
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
@@ -28,7 +28,6 @@ export const signup = async (req, res) => {
     });
 
     if (newUser) {
-      // generate jwt token here
       generateToken(newUser._id, res);
       await newUser.save();
 
@@ -94,10 +93,25 @@ export const updateProfile = async (req, res) => {
       return res.status(400).json({ message: "Profile pic is required" });
     }
 
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+    // Upload image to Supabase Storage
+    const base64Data = profilePic.split(",")[1];
+    const buffer = Buffer.from(base64Data, "base64");
+    const filename = `profile-${userId}-${Date.now()}.jpg`;
+
+    const { data, error } = await supabase.storage
+      .from("avatars")
+      .upload(filename, buffer, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+
+    if (error) throw error;
+
+    const imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${filename}`;
+
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      { profilePic: uploadResponse.secure_url },
+      { profilePic: imageUrl },
       { new: true }
     );
 

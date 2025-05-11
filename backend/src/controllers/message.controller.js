@@ -1,7 +1,6 @@
 import User from "../models/user.model.js";
 import Message from "../models/message.model.js";
-
-import cloudinary from "../lib/cloudinary.js";
+import { supabase } from "../lib/supabase.js";
 import { getReceiverSocketId, io } from "../lib/socket.js";
 
 export const getUsersForSidebar = async (req, res) => {
@@ -43,9 +42,20 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      // Upload base64 image to cloudinary
-      const uploadResponse = await cloudinary.uploader.upload(image);
-      imageUrl = uploadResponse.secure_url;
+      const base64Data = image.split(",")[1];
+      const buffer = Buffer.from(base64Data, "base64");
+      const filename = `message-${senderId}-${Date.now()}.jpg`;
+
+      const { data, error } = await supabase.storage
+        .from("messages")
+        .upload(filename, buffer, {
+          contentType: "image/jpeg",
+          upsert: true,
+        });
+
+      if (error) throw error;
+
+      imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/messages/${filename}`;
     }
 
     const newMessage = new Message({
